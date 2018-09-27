@@ -10,5 +10,5 @@ setup(name='spotiman',
     author_email='yigit.dallilar@gmail.com',
     packages=['spotiman'],
     package_dir={'spotiman': 'src/spotiman'},
-    scripts=['scripts/spotiman_simple_curses.py']
+    scripts=['scripts/spotiman_simple_curses']
 )

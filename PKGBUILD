@@ -9,16 +9,16 @@ url="https://github.com/pssncp142/spotiman"
 license=('GPL3')
 depends=('python-spotipy')
 provides=('spotiman')
-source=('spotiman::git+http://github.com/pssncp142/spotiman/')
-source=("pyakm-$pkgver-$pkgrel.tar.gz::$url/archive/$pkgver.tar.gz")
-sha256sums=("d8ab26f0ea8fffc2eb96b362dae514915193662719307fd45a0a7609efa03e47")
+source=('spotiman::git+http://github.com/pssncp142/spotiman/#branch=master')
+#source=("pyakm-$pkgver-$pkgrel.tar.gz::$url/archive/$pkgver.tar.gz")
+sha256sums=("SKIP")
 
 prepare(){
-	cd "$srcdir/spotiman-$pkgver"
+	cd "spotiman"
 }
 
 package(){
-	cd "$srcdir/spotiman-$pkgver"
+	cd "spotiman"
 	python setup.py install --root="$pkgdir/" --optimize=1
 }
 
