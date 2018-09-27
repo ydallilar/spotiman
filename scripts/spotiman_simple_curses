@@ -1,0 +1,72 @@
+#!/bin/python
+
+from spotiman.player import Player
+
+import spotipy
+import spotipy.util as util
+import curses
+from curses import wrapper
+
+import time
+
+scope = 'user-read-currently-playing user-read-playback-state user-modify-playback-state'
+token = util.prompt_for_user_token('ydallilar', scope)
+
+sp = spotipy.Spotify(auth=token)
+sp.trace = False
+
+player = Player(sp, refresh_interval=1)
+
+
+stdscr = curses.initscr()
+curses.start_color()
+curses.use_default_colors()
+print(curses.curs_set(0))
+
+curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_WHITE)
+curses.init_pair(2, curses.COLOR_RED, curses.COLOR_WHITE)
+
+def main(stdscr):
+
+    curses.noecho()
+    curses.cbreak()
+    #stdscr.keypad(True)
+
+    #stdscr.clear()
+
+    begin_x = 0; begin_y = 0
+    height = curses.LINES  ; width = curses.COLS 
+
+    win = curses.newwin(height, width, begin_y, begin_x)
+    win.box()
+
+
+    while True:
+
+        time.sleep(1)
+        win.clear()
+        win.box()
+    
+
+        height = curses.LINES  ; width = curses.COLS 
+        album = player.track.album.name
+        track = player.track.name
+        artist = player.track.artists[0].name
+        dur = player.track.duration_ms
+        prog = player.progress_ms
+
+        win.addstr(height//2 - 2, width//2-len(album)//2, album, curses.A_BOLD)
+        win.addstr(height//2 - 1, width//2-len(track)//2, track)
+        win.addstr(height//2 - 0, width//2-len(artist)//2, artist)
+
+        perc = prog/dur
+
+        win.addstr(height//2+2, 3, '[' + ('-'*(width-8)) + ']', curses.color_pair(1) | curses.A_BOLD)
+        win.addstr(height//2+2, 4, ('/'*int((width-6)*perc)), curses.color_pair(2) | curses.A_BOLD)
+
+        stdscr.refresh()
+        win.refresh()
+
+
+wrapper(main)
+
