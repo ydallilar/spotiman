@@ -7,10 +7,12 @@ import spotipy.util as util
 import curses
 from curses import wrapper
 
-import time
+import time, sys
+
+user_name = sys.argv[1]
 
 scope = 'user-read-currently-playing user-read-playback-state user-modify-playback-state'
-token = util.prompt_for_user_token('ydallilar', scope)
+token = util.prompt_for_user_token(user_name, scope)
 
 sp = spotipy.Spotify(auth=token)
 sp.trace = False
