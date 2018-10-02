@@ -17,11 +17,17 @@ token = util.prompt_for_user_token(user_name, scope)
 sp = spotipy.Spotify(auth=token)
 sp.trace = False
 
+def crop_str(str_in, limit):
+    if len(str_in) < limit:
+        return str_in
+    else:
+        return str_in[:limit-3] + '..'
+
 class CursesApp:
 
     stdscr = None
     tabs = []
-    selected = 0
+    selected = 1
     player = None
     kill = False
 
@@ -35,15 +41,23 @@ class CursesApp:
         curses.init_pair(2, curses.COLOR_RED, curses.COLOR_WHITE)
         
         self.player = Player(sp, refresh_interval=1)
+        self.player.start()
+        self.player.fetchPlaylists()
         curses.noecho()
         curses.cbreak()
         self.stdscr.keypad(True)
         self.tabs.append(PlaybackMonitor(self.player))        
-        self.tabs.append(DeviceMonitor(self.player))        
+        self.tabs.append(PlaylistMonitor(self.player))        
+        self.tabs.append(DeviceMonitor(self.player)) 
+
+        self.stdscr.clear()
+        self.stdscr.refresh()
+        self.tabs[1].draw()
         self.thr = threading.Thread(target=self.updateScreen)
         self.thr.start()
 
     def start(self):
+        #self.tabs[1].draw()
         while True:
             c = self.stdscr.getch()
             if c == ord('>'):
@@ -71,10 +85,14 @@ class CursesApp:
                 self.tabs[self.selected].downArrowAction()
             elif c == curses.KEY_ENTER or c == 10 or c == 13:
                 self.tabs[self.selected].selectAction()
+            elif c == ord('\t'):
+                self.tabs[self.selected].tabAction()
             elif c == ord('1'):
-                self.selected = 0
-            elif c == ord('2'):
                 self.selected = 1
+                self.tabs[self.selected].draw()
+            elif c == ord('2'):
+                self.selected = 2
+                self.tabs[self.selected].draw()
             elif c == ord('q'):
                 self.end()
                 break
@@ -83,18 +101,17 @@ class CursesApp:
         while True:
             if self.kill:
                 break
-            time.sleep(0.2)
             self.refresh()
+            time.sleep(1)
 
     def refresh(self):
-        self.tabs[self.selected].draw()
+        self.tabs[0].draw()
 
     def end(self):
 
         self.kill = True
         self.thr.join()
-        self.player.kill = True
-        self.player.status_thread.join()
+        self.player.shutdown()
 
         curses.nocbreak()
         self.stdscr.keypad(False)
@@ -102,18 +119,102 @@ class CursesApp:
         curses.echo()
         curses.endwin()
 
+class PlaylistMonitor:
+
+    begin_x = 0
+    begin_y = 0
+    height = 0
+    width = 0
+    select = [0,0]
+    win = 0
+
+    def __init__(self, player):
+
+        self.height = curses.LINES - 6 
+        self.width = curses.COLS 
+        self.player = player
+        self.win1 = curses.newwin(self.height, 30, self.begin_y, self.begin_x)
+        self.win1.box()
+        self.win1.refresh()
+        self.win2 = curses.newwin(self.height, self.width-30, self.begin_y, 30)
+        self.win2_width = self.width-30
+        self.win2.box()
+        self.win2.refresh()
+
+    def draw(self):
+
+        self.win1.clear()
+        self.win1.box()
+        self.win2.clear()
+        self.win2.box()
+
+        playlists = self.player.playlists
+        if not playlists[self.select[0]].fetched:
+            playlists[self.select[0]].fetchInfo()
+        tracks = playlists[self.select[0]].tracks
+
+        for i, playlist in enumerate(playlists):
+            if i == self.select[0]:
+                self.win1.addstr(i+1, 2, "%-26s" % crop_str(playlist.name, 26), curses.color_pair(1))
+            else:
+                self.win1.addstr(i+1, 2, "%-26s" % crop_str(playlist.name, 26))
+
+        for i, track in enumerate(playlists[self.select[0]].tracks):
+            col_width = (self.width-34)//3
+            fmt = "%%-%ds %%-%ds %%-%ds" % (col_width, col_width, col_width)
+            if i == self.select[1]:
+                self.win2.addstr(i+1, 2, fmt % (crop_str(track.name, col_width), 
+                    crop_str(track.artists[0].name, col_width),
+                    crop_str(track.album.name, col_width)), curses.color_pair(1))
+            else:
+                self.win2.addstr(i+1, 2, fmt % (crop_str(track.name, col_width), 
+                    crop_str(track.artists[0].name, col_width),
+                    crop_str(track.album.name, col_width)))
+            if i > self.height - 10:
+                break
+
+        self.win1.refresh()
+        self.win2.refresh()
+
+    def upArrowAction(self):
+        if self.select[self.win] > 0:
+            self.select[self.win] -= 1
+        self.draw()
+
+    def downArrowAction(self):
+        if self.win == 0:
+            if self.select[0] < len(self.player.playlists)-1:
+                self.select[0] += 1
+                self.select[1] = 0
+        if self.win == 1:
+            print(self.player.playlists[self.select[0]].tracks)
+            if self.select[1] < len(self.player.playlists[self.select[0]].tracks)-1:
+                self.select[1] += 1
+        self.draw()
+
+    def selectAction(self):
+        context_uri = 'spotify:playlist:%s' % self.player.playlists[self.select[0]].id
+        self.player.client.start_playback(context_uri=context_uri, offset={"position" : self.select[1]})
+
+    def tabAction(self):
+        if self.win == 0: 
+            self.win = 1
+        else:
+            self.win = 0
+
+
 class DeviceMonitor:
 
     begin_x = 0
     begin_y = 0
-    height = 20
-    width = 100
+    height = 0
+    width = 0
     selection = 0
 
     def __init__(self, player):
 
-        self.height = curses.LINES 
-        self.width = curses.COLS 
+        self.height = curses.LINES - 6 
+        self.width = curses.COLS
         self.player = player
         self.win = curses.newwin(self.height, self.width, self.begin_y, self.begin_x)
         self.win.box()
@@ -147,60 +248,70 @@ class DeviceMonitor:
     def selectAction(self):
         self.player.selectDevice(self.selection)
 
+    def tabAction(self):
+        pass
+
 class PlaybackMonitor:
 
     begin_x = 0
     begin_y = 0
-    height = 20
-    width = 100
+    height = 6
+    width = 0
     player = None
 
     def __init__(self, player):
     
-        self.height = curses.LINES 
         self.width = curses.COLS 
         self.player = player
-        self.win = curses.newwin(self.height, self.width, self.begin_y, self.begin_x)
-        self.win.box()
+        self.win = curses.newwin(self.height, self.width, curses.LINES-6, self.begin_x)
         self.win.refresh()
 
     def draw(self):
 
         self.win.clear()
-        self.win.box()
 
-        album = self.player.track.album.name
-        track = self.player.track.name
-        artist = self.player.track.artists[0].name
-        dur = self.player.track.duration_ms
-        prog = self.player.progress_ms
+        if self.player.track is not None:
+            album = self.player.track.album.name
+            track = self.player.track.name
+            artist = self.player.track.artists[0].name
+            dur = self.player.track.duration_ms
+            prog = self.player.progress_ms
 
-        progMMSS = self.player.getProgressMMSS()
-        durMMSS = self.player.getDurationMMSS()
+            progMMSS = self.player.getProgressMMSS()
+            durMMSS = self.player.getDurationMMSS()
+        else:
+            album = '-'
+            track = '-'
+            artist = '-'
+            dur = 1
+            prog = 0
+            progMMSS = '00:00'
+            durMMSS = '00:00'
 
-        self.win.addstr(self.height//2 - 2, self.width//2-len(album)//2, album, curses.A_BOLD)
-        self.win.addstr(self.height//2 - 1, self.width//2-len(track)//2, track)
-        self.win.addstr(self.height//2 - 0, self.width//2-len(artist)//2, artist)
+        artist_track = '%s - %s' % (artist, track)
+
+        self.win.addstr(1, self.width//2-len(album)//2, album, curses.A_BOLD)
+        self.win.addstr(2, self.width//2-len(artist_track)//2, artist_track)
 
         perc = prog/dur
 
         if self.player.is_playing:
-            self.win.addstr(self.height//2 - 2, 8, '|>', curses.A_BOLD)
-            self.win.addstr(self.height//2 - 1, 8, '|< |>', curses.A_BOLD)
-            self.win.addstr(self.height//2 - 0, 8, '|>', curses.A_BOLD)
+            self.win.addstr(2, 2, '|>', curses.A_BOLD)
+            self.win.addstr(3, 2, '|< |>', curses.A_BOLD)
+            self.win.addstr(4, 2, '|>', curses.A_BOLD)
         else:
-            self.win.addstr(self.height//2 - 2, 8, '|| ||', curses.A_BOLD)
-            self.win.addstr(self.height//2 - 1, 8, '|| ||', curses.A_BOLD)
-            self.win.addstr(self.height//2 - 0, 8, '|| ||', curses.A_BOLD)
+            self.win.addstr(2, 2, '|| ||', curses.A_BOLD)
+            self.win.addstr(3, 2, '|| ||', curses.A_BOLD)
+            self.win.addstr(4, 2, '|| ||', curses.A_BOLD)
 
-        self.win.addstr(self.height//2+2, 8, '[' + ('-'*(self.width-18)) + ']', 
+        self.win.addstr(4, 15, '[' + ('-'*(self.width-25)) + ']', 
                 curses.color_pair(1) | curses.A_BOLD)
-        self.win.addstr(self.height//2+2, 9, ('>'*int((self.width-16)*perc)), 
+        self.win.addstr(4, 16, ('>'*int((self.width-23)*perc)), 
                 curses.color_pair(2) | curses.A_BOLD)
-        self.win.addstr(self.height//2+2, 2, durMMSS, curses.A_BOLD)
-        self.win.addstr(self.height//2+2, self.width-7, progMMSS, curses.A_BOLD)
+        self.win.addstr(4, 9, durMMSS, curses.A_BOLD)
+        self.win.addstr(4, self.width-7, progMMSS, curses.A_BOLD)
 
-        self.win.addstr(self.height//2-2, self.width-10, 'Vol:%3d' % self.player.getVolume())
+        self.win.addstr(1, self.width-10, 'Vol:%3d' % self.player.getVolume())
 
         self.win.refresh()
 
@@ -211,6 +322,9 @@ class PlaybackMonitor:
         pass
 
     def selectAction(self):
+        pass
+
+    def tabAction(self):
         pass
 
 app = CursesApp()

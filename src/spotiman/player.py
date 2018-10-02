@@ -1,7 +1,7 @@
 
 import time
 import threading
-from spotiman.objects import Device, Track
+from spotiman.objects import Device, Track, User, Playlist
 
 """
 Simple implementation of a player class for spotiman
@@ -22,12 +22,35 @@ class Player:
     def __init__(self, client, refresh_interval=1):
         self.client = client
         self.refresh_interval = refresh_interval
+        self.fetchMe()
         self.refresh()
+
+    def refresh(self):
+        self.fetchDevices()
+        self.fetchCurrentPlayback()
+
+    def refreshRepeat(self):
+        while True:
+            if self.kill:
+                break
+            self.refresh()
+            time.sleep(self.refresh_interval)           
+
+    def start(self):
         self.status_thread = threading.Thread(target=self.refreshRepeat)
         self.status_thread.start()
 
-    def refresh(self):
+    def shutdown(self):
+        self.kill = True
+        self.status_thread.join()
+
+    def fetchDevices(self):
         self.devices = [Device(device) for device in self.client.devices()['devices']]
+
+    def fetchMe(self):
+        self.me = User(self.client.me())
+
+    def fetchCurrentPlayback(self):
         raw = self.client.current_playback()
         if raw is not None:
             self.track = Track(self.client, raw=raw['item'])
@@ -37,12 +60,13 @@ class Player:
         else:
             self.track = None
 
-    def refreshRepeat(self):
-        while True:
-            if self.kill:
-                break
-            self.refresh()
-            time.sleep(self.refresh_interval)           
+    def fetchPlaylists(self):
+        raw = self.client.current_user_playlists()
+        if len(raw['items']) > 0:
+            ids = [item['id'] for item in raw['items']]
+            names = [item['name'] for item in raw['items']]
+            print(names)
+            self.playlists = [Playlist(self.client, self.me, id=id, name=name) for id, name in zip(ids, names)]
 
     def selectDevice(self, index):
         self.client.transfer_playback(self.devices[index].id)

@@ -8,5 +8,8 @@ Also, includes spotiman_simple_curses executable, a simple experiment for a curs
 
 I have no ambitious objectives for this project. It is mostly a playground for me. But, if you have suggestions or comments, fell free to let me know. 
 
+# Log
 
+2018-10-02 : Added playlist window. 
+			 Think about how to handle if # of songs is more than lines
 
