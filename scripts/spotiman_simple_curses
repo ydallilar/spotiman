@@ -57,10 +57,19 @@ class CursesApp:
         self.thr.start()
 
     def start(self):
-        #self.tabs[1].draw()
         while True:
             c = self.stdscr.getch()
-            if c == ord('>'):
+            if c == curses.KEY_RESIZE:
+                self.stdscr.clear()
+                self.stdscr.refresh()
+                y, x = self.stdscr.getmaxyx()
+                #self.tabs[0].resize(y,x)
+                #self.tabs[1].resize(y,x)
+                #self.tabs[1].draw()
+                for tab in self.tabs: tab.resize(y,x)
+                self.tabs[self.selected].draw()
+                #self.tabs[1].draw()
+            elif c == ord('>'):
                 self.player.next()
             elif c == ord('<'):
                 self.player.prev()
@@ -125,12 +134,15 @@ class PlaylistMonitor:
     begin_y = 0
     height = 0
     width = 0
-    select = [0,0]
+    select = [0, 0]
+    begin = [0, 0]
+    lines = 0
     win = 0
 
     def __init__(self, player):
 
-        self.height = curses.LINES - 6 
+        self.height = curses.LINES - 6
+        self.lines = self.height - 4
         self.width = curses.COLS 
         self.player = player
         self.win1 = curses.newwin(self.height, 30, self.begin_y, self.begin_x)
@@ -153,43 +165,75 @@ class PlaylistMonitor:
             playlists[self.select[0]].fetchInfo()
         tracks = playlists[self.select[0]].tracks
 
-        for i, playlist in enumerate(playlists):
+        n_lists = len(playlists)
+        limit = n_lists
+        if n_lists > self.lines: limit = self.lines
+
+        self.win1.addstr(1, 2, '%-26s' % 'USER PLAYLISTS', curses.A_BOLD | curses.color_pair(1))
+
+        for i in range(self.begin[0], limit+self.begin[0]):
             if i == self.select[0]:
-                self.win1.addstr(i+1, 2, "%-26s" % crop_str(playlist.name, 26), curses.color_pair(1))
+                self.win1.addstr(i+2-self.begin[0], 2, "%-26s" % crop_str(playlists[i].name, 26), 
+                        curses.color_pair(1))
             else:
-                self.win1.addstr(i+1, 2, "%-26s" % crop_str(playlist.name, 26))
+                self.win1.addstr(i+2-self.begin[0], 2, "%-26s" % crop_str(playlists[i].name, 26))
 
-        for i, track in enumerate(playlists[self.select[0]].tracks):
-            col_width = (self.width-34)//3
-            fmt = "%%-%ds %%-%ds %%-%ds" % (col_width, col_width, col_width)
+        n_tracks = len(tracks)
+        limit = n_tracks
+        if n_tracks > self.lines: limit = self.lines
+
+        col_width = (self.width-34)//3
+        fmt = "%%-%ds %%-%ds %%-%ds" % (col_width, col_width, col_width)
+        self.win2.addstr(1, 2, fmt % ('TITLE', 'ARTIST', 'ALBUM'), curses.A_BOLD | curses.color_pair(1))
+
+        for i in range(self.begin[1], limit+self.begin[1]):
             if i == self.select[1]:
-                self.win2.addstr(i+1, 2, fmt % (crop_str(track.name, col_width), 
-                    crop_str(track.artists[0].name, col_width),
-                    crop_str(track.album.name, col_width)), curses.color_pair(1))
+                self.win2.addstr(i+2-self.begin[1], 2, fmt % (crop_str(tracks[i].name, col_width), 
+                    crop_str(tracks[i].artists[0].name, col_width),
+                    crop_str(tracks[i].album.name, col_width)), curses.color_pair(1))
             else:
-                self.win2.addstr(i+1, 2, fmt % (crop_str(track.name, col_width), 
-                    crop_str(track.artists[0].name, col_width),
-                    crop_str(track.album.name, col_width)))
-            if i > self.height - 10:
-                break
+                self.win2.addstr(i+2-self.begin[1], 2, fmt % (crop_str(tracks[i].name, col_width), 
+                    crop_str(tracks[i].artists[0].name, col_width),
+                    crop_str(tracks[i].album.name, col_width)))
 
+        self.win1.refresh()
+        self.win2.refresh()
+
+    def resize(self, y, x):
+        self.height = y - 6
+        self.width = x
+        self.win2_width = x - 30
+        self.lines = self.height - 3
+        self.win1.erase()
+        self.win2.erase()
+        self.win1 = curses.newwin(self.height, 30, 0, 0)
+        self.win2 = curses.newwin(self.height, x-30, 0, 30)
         self.win1.refresh()
         self.win2.refresh()
 
     def upArrowAction(self):
         if self.select[self.win] > 0:
             self.select[self.win] -= 1
+            if self.begin[self.win] == self.select[self.win]+1:
+                self.begin[self.win] -= 1
+        if self.win == 0:
+            self.select[1] = 0 
+            self.begin[1] = 0
         self.draw()
 
     def downArrowAction(self):
         if self.win == 0:
             if self.select[0] < len(self.player.playlists)-1:
                 self.select[0] += 1
+                if self.select[0] == self.lines + self.begin[0]:
+                    self.begin[0] += 1
                 self.select[1] = 0
         if self.win == 1:
             print(self.player.playlists[self.select[0]].tracks)
             if self.select[1] < len(self.player.playlists[self.select[0]].tracks)-1:
                 self.select[1] += 1
+                if self.select[1] == self.lines + self.begin[1]:
+                    self.begin[1] += 1
         self.draw()
 
     def selectAction(self):
@@ -233,6 +277,14 @@ class DeviceMonitor:
             else:
                 self.win.addstr(i+1, 2, device.name)
 
+        self.win.refresh()
+
+    def resize(self, y, x):
+        self.height = y - 6 
+        self.width = x
+        self.win.erase()
+        self.win = curses.newwin(self.height, self.width, y, self.begin_x)
+        self.win.box()
         self.win.refresh()
 
     def upArrowAction(self):
@@ -315,6 +367,13 @@ class PlaybackMonitor:
 
         self.win.refresh()
 
+    def resize(self, y, x):
+        self.height = y
+        self.width = x
+        self.win.erase()
+        self.win = curses.newwin(self.height, self.width, y-6, self.begin_x)
+        self.win.refresh()
+    
     def upArrowAction(self):
         pass
 
