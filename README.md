@@ -11,7 +11,10 @@ I have no ambitious objectives for this project. It is mostly a playground for m
 # Log
 
 2018-10-02 : 
+
 	- Added playlist window. 
+
 	- Fix resizing terminal window
+
 	- Enable scrolling for long lists
 
