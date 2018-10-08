@@ -1,21 +1,26 @@
 #!/bin/python
 
 from spotiman.player import Player
+from spotiman.utils import Spotify, prompt_for_user_token
 
 import spotipy
 import spotipy.util as util
 import curses
 import threading
+import logging
 
 import time, sys
 
+logging.basicConfig(filename='app.log', filemode='w', level=logging.DEBUG, 
+        format='%(name)s - %(levelname)s - %(message)s')
+
 user_name = sys.argv[1]
-
-scope = 'user-read-currently-playing user-read-playback-state user-modify-playback-state'
-token = util.prompt_for_user_token(user_name, scope)
-
-sp = spotipy.Spotify(auth=token)
+scope = 'user-read-currently-playing user-read-playback-state user-modify-playback-state playlist-read-private'
+oauth2 = prompt_for_user_token(user_name, scope)
+sp = Spotify(oauth2=oauth2)
 sp.trace = False
+
+logging.debug('Registering spotipy client with user %s', user_name)
 
 def crop_str(str_in, limit):
     if len(str_in) < limit:
@@ -33,6 +38,7 @@ class CursesApp:
 
     def __init__(self):
 
+        logging.debug("Initiating CursesApp.")
         self.stdscr = curses.initscr()
         curses.curs_set(False)
         curses.start_color()
@@ -40,16 +46,19 @@ class CursesApp:
         curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_WHITE)
         curses.init_pair(2, curses.COLOR_RED, curses.COLOR_WHITE)
         
+        logging.debug("Initializing spotiman Player Class.")
         self.player = Player(sp, refresh_interval=1)
         self.player.start()
         self.player.fetchPlaylists()
-        curses.noecho()
-        curses.cbreak()
-        self.stdscr.keypad(True)
+
+        logging.debug('Registering window tabs.')
         self.tabs.append(PlaybackMonitor(self.player))        
         self.tabs.append(PlaylistMonitor(self.player))        
         self.tabs.append(DeviceMonitor(self.player)) 
 
+        curses.noecho()
+        curses.cbreak()
+        self.stdscr.keypad(True)
         self.stdscr.clear()
         self.stdscr.refresh()
         self.tabs[1].draw()
@@ -57,18 +66,16 @@ class CursesApp:
         self.thr.start()
 
     def start(self):
+        logging.info('Curses app main thread started.')
         while True:
             c = self.stdscr.getch()
             if c == curses.KEY_RESIZE:
+                y, x = self.stdscr.getmaxyx()
+                logging.info('Terminal window is resized to (%d, %d)', y, x)
                 self.stdscr.clear()
                 self.stdscr.refresh()
-                y, x = self.stdscr.getmaxyx()
-                #self.tabs[0].resize(y,x)
-                #self.tabs[1].resize(y,x)
-                #self.tabs[1].draw()
                 for tab in self.tabs: tab.resize(y,x)
                 self.tabs[self.selected].draw()
-                #self.tabs[1].draw()
             elif c == ord('>'):
                 self.player.next()
             elif c == ord('<'):
@@ -105,6 +112,8 @@ class CursesApp:
             elif c == ord('q'):
                 self.end()
                 break
+        logging.debug('Main thread exiting.')
+
 
     def updateScreen(self):
         while True:
@@ -155,6 +164,7 @@ class PlaylistMonitor:
 
     def draw(self):
 
+        logging.debug('Redrawing PlaylistMonitor.')
         self.win1.clear()
         self.win1.box()
         self.win2.clear()
@@ -212,6 +222,7 @@ class PlaylistMonitor:
         self.win2.refresh()
 
     def upArrowAction(self):
+        logging.debug("PlaylistMonitor upArrow Method.")
         if self.select[self.win] > 0:
             self.select[self.win] -= 1
             if self.begin[self.win] == self.select[self.win]+1:

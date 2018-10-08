@@ -13,8 +13,10 @@ I have no ambitious objectives for this project. It is mostly a playground for m
 2018-10-02 : 
 
 	- Added playlist window. 
-
 	- Fix resizing terminal window
-
 	- Enable scrolling for long lists
+
+2018-10-08 :
+
+	- Solved refreshing token
 

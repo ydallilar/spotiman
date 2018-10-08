@@ -2,6 +2,7 @@
 import time
 import threading
 from spotiman.objects import Device, Track, User, Playlist
+import logging
 
 """
 Simple implementation of a player class for spotiman
@@ -49,6 +50,7 @@ class Player:
 
     def fetchMe(self):
         self.me = User(self.client.me())
+        logging.debug('Fetching user %s' % self.me.id)
 
     def fetchCurrentPlayback(self):
         raw = self.client.current_playback()
@@ -58,17 +60,19 @@ class Player:
             self.progress_ms = raw['progress_ms']
             self.volume_percent = raw['device']['volume_percent']
         else:
+            logging.warning("Failed to set current playback")
             self.track = None
 
     def fetchPlaylists(self):
         raw = self.client.current_user_playlists()
+        logging.debug('Fetching user playlist information.')
         if len(raw['items']) > 0:
             ids = [item['id'] for item in raw['items']]
             names = [item['name'] for item in raw['items']]
-            print(names)
             self.playlists = [Playlist(self.client, self.me, id=id, name=name) for id, name in zip(ids, names)]
 
     def selectDevice(self, index):
+        logging.debug("Setting current device to {%s:%s}" % (self.devices[index].id, self.devices[index].name))
         self.client.transfer_playback(self.devices[index].id)
 
     def play(self):
