@@ -8,6 +8,11 @@ Also, includes spotiman_simple_curses executable, a simple experiment for a curs
 
 I have no ambitious objectives for this project. It is mostly a playground for me. But, if you have suggestions or comments, fell free to let me know. 
 
+TODO:
+
+- Release curses app as a module so others can contribute for new tabs.
+- Event based kill on the threads
+
 # Log
 
 2018-10-02 : 
@@ -19,4 +24,9 @@ I have no ambitious objectives for this project. It is mostly a playground for m
 2018-10-08 :
 
 	- Solved refreshing token
+
+2018-10-15
+
+	- SpotifyObject class and inherited classes. Now, revised version of spotipy.Spotify returns objects. (ongoing)
+
 

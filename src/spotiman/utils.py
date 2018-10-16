@@ -1,6 +1,7 @@
 
 import spotipy
 from spotipy.oauth2 import is_token_expired
+from spotiman.objects import Device, Track, Playlist, User
 
 import logging
 import os, time
@@ -85,32 +86,6 @@ def prompt_for_user_token(username, scope=None, client_id = None,
     else:
         return None
 
-
-
-class JsonParser:
-
-    class Dummy:
-        pass
-
-    def __init__(self, data):
-        self.result = self.parse(data)
-
-    def parse(self, item):
-
-        if type(item) is list:
-            out=[]
-            for info in item:
-                out.append(self.parse(info))
-        elif type(item) is dict:
-            out = self.Dummy()
-            for info in item.keys():
-                out.__setattr__(info, self.parse(item[info]))
-        else:
-            out = item
-
-        return out
-
-
 class Spotify(spotipy.Spotify):
 
     # Same as the original but accepts the oauth2 object instead of token
@@ -123,13 +98,28 @@ class Spotify(spotipy.Spotify):
         else:
             token = None
 
-        print(token)
-
         super().__init__(auth=token, requests_session=requests_session,
             client_credentials_manager=client_credentials_manager, 
             proxies=proxies, requests_timeout=requests_timeout)
 
     def _internal_call(self, method, url, payload, params):
+
+        while True:
+
+            try:
+                self.refreshTokenIfExpired() # need to check every time instead of once
+
+                return super()._internal_call(method, url, payload, params)
+            except spotipy.SpotifyException as e:
+                logging.warning('Spotify Exception!!!')
+                logging.warning(str(e))
+                time.sleep(1)
+            except Exception as e:
+                logging.warning('Requests exception!!!')
+                logging.warning(str(e))
+                time.sleep(1)
+
+    def refreshTokenIfExpired(self):
 
         now = int(time.time())
         token_info = self.oauth2.get_cached_token()
@@ -143,7 +133,43 @@ class Spotify(spotipy.Spotify):
             logging.debug("%d seconds for the token to expire." % \
                     ((token_info['expires_at']-now)))
 
-        return super()._internal_call(method, url, payload, params)
+
+    def devices(self):
+    
+        return [Device(device) for device in super().devices()['devices']]
+
+    def current_playback(self, market=None):
+
+        raw = super().current_playback()
+
+        if raw is not None:
+            if 'item' in raw: 
+                track = Track(raw['item'])
+                del raw['item']
+                return track, raw
+        else:
+            return None, None
 
 
+    def user_playlist_tracks(self, user, playlist_id=None, fields=None,
+                                limit=100, offset=0, market=None):
+
+        raw = super().user_playlist_tracks(user.id, playlist_id=playlist_id, fields=fields,
+                limit=limit, offset=offset, market=market)
+        tracks = [Track(raw_track['track']) for raw_track in raw['items']]
+        return tracks
+
+
+    def current_user_playlists(self, limit=50, offset=0):
+
+        raw = super().current_user_playlists(limit=limit, offset=offset)
+        if len(raw['items']) > 0:
+            playlists = [Playlist(item, self) for item in raw['items']]
+            return playlists
+        else:
+            return []
+
+    def me(self):
+
+        return User(super().me())
 

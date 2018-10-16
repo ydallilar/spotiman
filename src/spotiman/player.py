@@ -3,6 +3,7 @@ import time
 import threading
 from spotiman.objects import Device, Track, User, Playlist
 import logging
+import json
 
 """
 Simple implementation of a player class for spotiman
@@ -46,30 +47,28 @@ class Player:
         self.status_thread.join()
 
     def fetchDevices(self):
-        self.devices = [Device(device) for device in self.client.devices()['devices']]
+        self.devices = self.client.devices()
+        for device in self.devices: logging.debug(device.id)
 
     def fetchMe(self):
-        self.me = User(self.client.me())
+        self.me = self.client.me()
         logging.debug('Fetching user %s' % self.me.id)
 
     def fetchCurrentPlayback(self):
-        raw = self.client.current_playback()
-        if raw is not None:
-            self.track = Track(self.client, raw=raw['item'])
-            self.is_playing = raw['is_playing']
-            self.progress_ms = raw['progress_ms']
-            self.volume_percent = raw['device']['volume_percent']
+        track, info = self.client.current_playback()
+        if info is not None:
+            self.track = track
+            self.is_playing = info['is_playing']
+            self.progress_ms = info['progress_ms']
+            self.device = Device(info['device'])
         else:
-            logging.warning("Failed to set current playback")
+            logging.warning("Failed to get current playback")
             self.track = None
+            self.device = None
 
     def fetchPlaylists(self):
-        raw = self.client.current_user_playlists()
+        self.playlists = self.client.current_user_playlists()
         logging.debug('Fetching user playlist information.')
-        if len(raw['items']) > 0:
-            ids = [item['id'] for item in raw['items']]
-            names = [item['name'] for item in raw['items']]
-            self.playlists = [Playlist(self.client, self.me, id=id, name=name) for id, name in zip(ids, names)]
 
     def selectDevice(self, index):
         logging.debug("Setting current device to {%s:%s}" % (self.devices[index].id, self.devices[index].name))
@@ -98,13 +97,16 @@ class Player:
         self.pause()
 
     def getVolume(self):
-        return self.volume_percent
+        if self.device is not None:
+            return self.device.volume_percent
+        else:
+            return 0
 
     def setVolume(self, perc):
         self.client.volume(perc)
 
     def setRelVolume(self, perc):
-        self.client.volume(self.volume_percent + perc)
+        self.client.volume(self.device.volume_percent + perc)
 
     def getDurationMMSS(self):
         return "%2d:%02d" % ((self.progress_ms/1000.) / 60, (self.progress_ms/1000.) % 60)
@@ -127,6 +129,6 @@ class Player:
             ndx_fmt = "%2d => "
             if device.is_active: ndx_fmt = "*" + ndx_fmt
             print(ndx_fmt % i)
-            device.printDevice(fmt="    %-20s : %-10s")
+            device.print(fmt="    %-20s : %-10s")
  
 
